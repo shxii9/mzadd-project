@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # الخادم الخلفي - Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - SECRET_KEY=mzadd_docker_secret_key
+      - DATABASE_URL=sqlite:///mzadd.db
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+    networks:
+      - mzadd_network
+    restart: unless-stopped
+
+  # لوحة تحكم الإدارة - Admin Dashboard
+  admin-dashboard:
+    build:
+      context: ./frontend/admin-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+    volumes:
+      - ./frontend/admin-dashboard:/app
+      - /app/node_modules
+    networks:
+      - mzadd_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # واجهة المزايدة - Bidding Interface
+  bidding-interface:
+    build:
+      context: ./frontend/bidding-interface
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+    volumes:
+      - ./frontend/bidding-interface:/app
+      - /app/node_modules
+    networks:
+      - mzadd_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # لوحة تحكم التاجر - Merchant Dashboard
+  merchant-dashboard:
+    build:
+      context: ./frontend/merchant-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+    volumes:
+      - ./frontend/merchant-dashboard:/app
+      - /app/node_modules
+    networks:
+      - mzadd_network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+
+networks:
+  mzadd_network:
+    driver: bridge
