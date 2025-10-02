@@ -4,7 +4,8 @@ from flask_socketio import SocketIO, join_room, leave_room
 from config import Config
 from models import db, bcrypt
 
-socketio = SocketIO(cors_allowed_origins="*")
+# ⚡ استخدم gevent بدلاً من eventlet لتجنب مشاكل SSL في Python 3.13
+socketio = SocketIO(cors_allowed_origins="*", async_mode='gevent')
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -59,4 +60,5 @@ app = create_app()
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+    # ⚡ استخدم gevent كخادم async
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
