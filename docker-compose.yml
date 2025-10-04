@@ -1,81 +1,65 @@
+# إصدار Docker Compose (ملاحظة: هذا السطر أصبح اختياريًا في الإصدارات الحديثة)
 version: '3.8'
 
+# تعريف الخدمات (الحاويات) التي يتكون منها المشروع
 services:
-  # الخادم الخلفي - Backend API
+  # --- خدمة الواجهة الخلفية (Backend) ---
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "5000:5000"
-    environment:
-      - FLASK_ENV=development
-      - SECRET_KEY=mzadd_docker_secret_key
-      - DATABASE_URL=sqlite:///mzadd.db
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mzadd-backend
+    working_dir: /app/backend  # <-- (الإضافة الأولى) هذا هو التعديل الأهم
     volumes:
-      - ./backend:/app
-      - backend_data:/app/data
+      - ./backend:/app/backend # <-- (الإضافة الثانية) قمنا بتحديث المسار هنا ليتطابق
     networks:
-      - mzadd_network
-    restart: unless-stopped
+      - mzadd-net
 
-  # لوحة تحكم الإدارة - Admin Dashboard
+  # --- خدمة Nginx (Reverse Proxy) ---
+  nginx-proxy:
+    image: nginx:1.25-alpine
+    container_name: mzadd-nginx-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - mzadd-net
+    depends_on:
+      - backend
+      - admin-dashboard
+      - merchant-dashboard
+      - bidding-interface
+
+  # --- خدمة واجهة الأدمن ---
   admin-dashboard:
     build:
       context: ./frontend/admin-dashboard
       dockerfile: Dockerfile
-    ports:
-      - "3001:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:5000
-    volumes:
-      - ./frontend/admin-dashboard:/app
-      - /app/node_modules
+    container_name: mzadd-admin-dashboard
     networks:
-      - mzadd_network
-    depends_on:
-      - backend
-    restart: unless-stopped
+      - mzadd-net
 
-  # واجهة المزايدة - Bidding Interface
-  bidding-interface:
-    build:
-      context: ./frontend/bidding-interface
-      dockerfile: Dockerfile
-    ports:
-      - "3002:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:5000
-    volumes:
-      - ./frontend/bidding-interface:/app
-      - /app/node_modules
-    networks:
-      - mzadd_network
-    depends_on:
-      - backend
-    restart: unless-stopped
-
-  # لوحة تحكم التاجر - Merchant Dashboard
+  # --- خدمة واجهة التاجر ---
   merchant-dashboard:
     build:
       context: ./frontend/merchant-dashboard
       dockerfile: Dockerfile
-    ports:
-      - "3003:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:5000
-    volumes:
-      - ./frontend/merchant-dashboard:/app
-      - /app/node_modules
+    container_name: mzadd-merchant-dashboard
     networks:
-      - mzadd_network
-    depends_on:
-      - backend
-    restart: unless-stopped
+      - mzadd-net
 
-volumes:
-  backend_data:
+  # --- خدمة واجهة المزايدة ---
+  bidding-interface:
+    build:
+      context: ./frontend/bidding-interface
+      dockerfile: Dockerfile
+    container_name: mzadd-bidding-interface
+    networks:
+      - mzadd-net
 
+# --- تعريف الشبكة ---
 networks:
-  mzadd_network:
+  mzadd-net:
     driver: bridge
+

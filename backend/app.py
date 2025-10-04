@@ -1,50 +1,46 @@
-from flask import Flask, jsonify, request
+# backend/app.py
+from flask import Flask
 from flask_cors import CORS
-from flask_socketio import SocketIO, join_room, leave_room
-from config import Config
-from models import db, bcrypt
 
-# ⚡ استخدم gevent بدلاً من eventlet لتجنب مشاكل SSL في Python 3.13
-socketio = SocketIO(cors_allowed_origins="*", async_mode='gevent')
+# --- 1. استيراد الإضافات والتهيئة ---
+# لاحظ: لا توجد نقاط هنا. هذا هو الشكل الصحيح.
+from extensions import db, bcrypt, socketio
+from config import Config
 
 def create_app(config_class=Config):
+    """
+    Application Factory:
+    This pattern allows us to create instances of the app with different configurations,
+    which is great for testing and scalability.
+    """
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
-    
+    # --- 2. تهيئة الإضافات مع التطبيق ---
     db.init_app(app)
     bcrypt.init_app(app)
     socketio.init_app(app)
 
+    # --- 3. تسجيل Blueprints ---
+    # لاحظ: لا توجد نقاط هنا أيضًا. هذا هو الشكل الصحيح.
     from api.auth import auth_bp
-    from api.items import items_bp
-    from api.auctions import auctions_bp
+    # from api.items import items_bp      # TODO: Uncomment when items API is implemented
+    # from api.auctions import auctions_bp  # TODO: Uncomment when auctions API is implemented
+    from api.merchant import merchant_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(items_bp, url_prefix='/api/items')
-    app.register_blueprint(auctions_bp, url_prefix='/api/auctions')
+    # app.register_blueprint(items_bp, url_prefix='/api/items')      # TODO: Uncomment when items API is implemented
+    # app.register_blueprint(auctions_bp, url_prefix='/api/auctions')  # TODO: Uncomment when auctions API is implemented
+    app.register_blueprint(merchant_bp, url_prefix='/api')
 
-    @app.route('/')
-    def index():
-        return "BidFlow API Server is running."
+    # --- 4. أوامر مخصصة (Custom CLI Commands) ---
+    @app.cli.command("init-db")
+    def init_db_command():
+        """Creates the database tables."""
+        db.create_all()
+        print("✅ Initialized the database and created all tables.")
 
-    @socketio.on('join')
-    def on_join(data):
-        auction_id = data.get('auction_id')
-        if auction_id:
-            room = f'auction-{auction_id}'
-            join_room(room)
-            print(f"Client joined room: {room}")
-
-    @socketio.on('leave')
-    def on_leave(data):
-        auction_id = data.get('auction_id')
-        if auction_id:
-            room = f'auction-{auction_id}'
-            leave_room(room)
-            print(f"Client left room: {room}")
-            
+    # --- 5. معالجات أحداث SocketIO ---
     @socketio.on('connect')
     def on_connect():
         print('Client connected')
@@ -55,10 +51,8 @@ def create_app(config_class=Config):
 
     return app
 
-app = create_app()
-
+# --- 6. نقطة الدخول للتشغيل المباشر (للتطوير فقط) ---
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    # ⚡ استخدم gevent كخادم async
+    app = create_app()
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+

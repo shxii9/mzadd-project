@@ -1,31 +1,40 @@
-# مرحلة البناء
-FROM node:18-alpine AS build
+# --- المرحلة الأولى: بناء التطبيق (Builder Stage) ---
+# نستخدم صورة Node.js رسمية (إصدار 20) كنقطة بداية.
+# "alpine" هي نسخة خفيفة جدًا من لينكس، مثالية لتقليل حجم الصورة.
+FROM node:20-alpine AS builder
 
+# نحدد مجلد العمل داخل الحاوية.
 WORKDIR /app
 
-# نسخ ملفات package.json و pnpm-lock.yaml
-COPY package.json pnpm-lock.yaml* ./
+# ننسخ ملفات package.json و package-lock.json أولاً.
+# هذا يستفيد من التخزين المؤقت لـ Docker. طالما لم تتغير هذه الملفات،
+# لن يتم إعادة تنفيذ "npm install" في كل مرة.
+COPY package.json package-lock.json* ./
 
-# تثبيت pnpm
-RUN npm install -g pnpm
+# نثبت الاعتماديات. نستخدم --legacy-peer-deps الذي احتجناه سابقًا.
+RUN npm install --legacy-peer-deps
 
-# تثبيت الاعتماديات
-RUN pnpm install
-
-# نسخ باقي ملفات التطبيق
+# ننسخ باقي كود التطبيق.
 COPY . .
 
-# بناء التطبيق للإنتاج
-RUN pnpm run build
+# نقوم ببناء التطبيق للإنتاج. هذا الأمر سيقوم بإنشاء نسخة مُصغّرة
+# ومُحسّنة من التطبيق داخل مجلد /app/dist.
+RUN npm run build
 
-# مرحلة الإنتاج
-FROM nginx:stable-alpine
 
-# نسخ الملفات المبنية من مرحلة البناء
-COPY --from=build /app/dist /usr/share/nginx/html
+# --- المرحلة الثانية: الصورة النهائية (Final Stage) ---
+# نبدأ من جديد بصورة خادم ويب خفيفة جدًا (Nginx).
+# Nginx هو خادم ويب عالي الأداء ومثالي لتقديم الملفات الثابتة (HTML, CSS, JS)
+# التي ينتجها أمر "npm run build".
+FROM nginx:1.25-alpine
 
-# كشف المنفذ
+# ننسخ ملفات التطبيق المبنية من مرحلة البناء إلى المجلد
+# الذي يقدم منه Nginx الملفات بشكل افتراضي.
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# نكشف عن المنفذ 80، وهو المنفذ الافتراضي الذي يعمل عليه Nginx.
 EXPOSE 80
 
-# تشغيل Nginx
+# الأمر الافتراضي لتشغيل Nginx.
 CMD ["nginx", "-g", "daemon off;"]
+

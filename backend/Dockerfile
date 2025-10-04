@@ -1,34 +1,26 @@
-# استخدام Python 3.11 كصورة أساسية
-FROM python:3.11-slim
-
-# تعيين مجلد العمل
+# --- المرحلة الأولى: بناء البيئة (Builder Stage) ---
+FROM python:3.11-slim-bullseye AS builder
 WORKDIR /app
-
-# تثبيت متطلبات النظام
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-# نسخ ملف المتطلبات
-COPY requirements.txt .
-
-# تثبيت متطلبات Python
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# نسخ كود التطبيق
+# --- المرحلة الثانية: الصورة النهائية (Final Stage) ---
+FROM python:3.11-slim-bullseye
+WORKDIR /app
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# --- تثبيت تطبيقنا كحزمة ---
+# ننسخ كل شيء أولاً
 COPY . .
+# نثبت المشروع في وضع قابل للتعديل. هذا يحل جميع مشاكل الاستيراد.
+RUN pip install -e .
 
-# إنشاء مجلد البيانات
-RUN mkdir -p data
-
-# تعيين متغيرات البيئة
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=development
-ENV PYTHONPATH=/app
-
-# كشف المنفذ
+RUN useradd --create-home appuser
+USER appuser
 EXPOSE 5000
-
-# تشغيل التطبيق
-CMD ["python", "app.py"]
+# هذا الأمر سيعمل الآن بشكل صحيح لأن التطبيق مثبت كحزمة
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:create_app()"]
